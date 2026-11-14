@@ -2,6 +2,12 @@ node_modules/
 dist/
 build/
 .env
-.env.*
+.env.local
+data/
+record/
+public/hls/
 *.log
 .DS_Store
+
+# IDE 工作记忆不进入生产仓库
+.codebuddy/

@@ -1,0 +1,152 @@
+'use strict';
+
+const express = require('express');
+const os = require('node:os');
+const NodeMediaServer = require('node-media-server');
+const nmsLogger = require('node-media-server/src/core/logger.js');
+const { rateSampler } = require('node-media-server/src/core/rate_sampler.js');
+const config = require('./config');
+const StreamManager = require('./stream-manager');
+
+const log = (message) => console.log(`[live ${new Date().toLocaleTimeString('zh-CN')}] ${message}`);
+const manager = new StreamManager(config, log);
+const recommendedBitrateKbps = Math.min(3000, Math.round(config.uplinkMbps * 200));
+
+function lanAddresses() {
+  const addresses = [];
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const item of list || []) {
+      if ((item.family === 'IPv4' || item.family === 4) && !item.internal) {
+        addresses.push(item.address);
+      }
+    }
+  }
+  return addresses;
+}
+
+try {
+  manager.ensureFfmpeg();
+} catch (err) {
+  console.error(`[live] ${err.message}`);
+  process.exit(1);
+}
+manager.cleanStalePlaylists();
+
+// RTMP 服务：接收 OBS 推流；HLS 文件由 ffmpeg 转封装后交给下面的 Web 服务分发
+const nms = new NodeMediaServer({
+  bind: '0.0.0.0',
+  rtmp: { port: config.rtmpPort },
+  store: { path: config.dataDir, maxHistory: 50 },
+  webadmin: { enable: false },
+  auth: { play: false, publish: false },
+});
+nmsLogger.level = 'warn';
+
+nms.on('postPublish', (session) => {
+  const name = session.streamName;
+  const reject = (reason) => {
+    log(`拒绝推流 ${session.streamPath}: ${reason}`);
+    session.close();
+  };
+
+  if (session.streamApp !== config.rtmpApp || !StreamManager.validName(name)) {
+    reject('推流地址或频道名不合法');
+    return;
+  }
+  if (config.streamToken && session.streamQuery?.token !== config.streamToken) {
+    reject('推流密钥不正确');
+    return;
+  }
+  if (!manager.has(name) && manager.activeCount() >= config.maxStreams) {
+    reject(`并发频道已达上限 ${config.maxStreams}`);
+    return;
+  }
+  manager.start(name, session);
+});
+
+nms.on('donePublish', (session) => manager.stop(session.streamName));
+nms.run();
+
+const app = express();
+app.disable('x-powered-by');
+app.use('/vendor', express.static(config.vendorDir, { maxAge: '7d', index: false }));
+
+// HLS 播放列表必须不缓存，分片短缓存即可
+app.use('/hls', express.static(config.hlsDir, {
+  index: false,
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.m3u8')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=2');
+    }
+  },
+}));
+
+// 连接信息只在终端输出，API 不返回服务器地址、端口或密钥
+app.get('/api/state', (_req, res) => {
+  const channels = manager.list().map((channel) => ({
+    ...channel,
+    inBps: rateSampler.getStreamRates(`/${config.rtmpApp}/${channel.name}`).inBps,
+  }));
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    ok: true,
+    channels,
+    capacity: {
+      uplinkMbps: config.uplinkMbps,
+      maxStreams: config.maxStreams,
+      recommendedBitrateKbps,
+    },
+    defaults: {
+      channel: config.defaultChannel,
+      hlsTime: config.hlsTime,
+      hlsListSize: config.hlsListSize,
+    },
+  });
+});
+
+app.get('/api/health', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ ok: true, channels: manager.list().length });
+});
+
+app.use(express.static(config.publicDir, { index: 'index.html', maxAge: 0 }));
+
+const server = app.listen(config.httpPort, '0.0.0.0', () => {
+  const addresses = lanAddresses();
+  const host = addresses[0] || '127.0.0.1';
+  const rtmpUrl = (address) => `rtmp://${address}:${config.rtmpPort}/${config.rtmpApp}`;
+  const streamKey = config.streamToken
+    ? `${config.defaultChannel}?token=${config.streamToken}`
+    : config.defaultChannel;
+
+  log('==== OBS 连接信息（仅终端显示，网页 / API 不返回）====');
+  log(`  服务器:   ${rtmpUrl(host)}`);
+  log(`  同机推流: ${rtmpUrl('127.0.0.1')}`);
+  if (addresses.length > 1) log(`  其他网卡: ${addresses.slice(1).map(rtmpUrl).join('  ')}`);
+  log(`  串流密钥: ${streamKey}${config.streamToken ? '' : '（未启用鉴权）'}`);
+  log(`  观看页:   http://${host}:${config.httpPort}`);
+  log(`  建议码率: ${recommendedBitrateKbps} Kbps / 上行 ${config.uplinkMbps}Mbps / 最多 ${config.maxStreams} 路`);
+  log(`  HLS 目录: ${config.hlsDir}`);
+  if (config.streamToken) log('  注意: 日志包含密钥，请限制终端 / journald 的访问权限');
+  else log('  提示: 公网部署请设置 STREAM_TOKEN，并只向推流端开放 1935 端口');
+});
+
+server.on('error', (err) => {
+  console.error(`[live] Web 服务启动失败: ${err.message}`);
+  process.exit(1);
+});
+
+let shuttingDown = false;
+async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  log('正在停止服务...');
+  manager.stopAll();
+  server.close();
+  await nms.stop();
+  process.exit(0);
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

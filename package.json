@@ -1,13 +1,23 @@
 {
   "name": "obs_broadcast_web",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "OBS RTMP 推流 + HLS 直播观看服务",
+  "main": "server/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --check server/index.js && node --check server/config.js && node --check server/stream-manager.js && node --check public/app.js"
   },
-  "keywords": [],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": ["rtmp", "hls", "obs", "live"],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^4.22.3",
+    "hls.js": "^1.7.4",
+    "node-media-server": "^4.4.6"
+  }
 }

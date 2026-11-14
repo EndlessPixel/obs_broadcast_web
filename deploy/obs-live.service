@@ -1,0 +1,28 @@
+# 复制到 /etc/systemd/system/obs-live.service
+# 前提：代码放在 /opt/obs-live，配置在 /opt/obs-live/.env（参考 .env.example）
+# Node 需 >= 20，ExecStart 改成服务器上 `which node` 的结果
+# 用户需存在且能写工作目录与 HLS_DIR：useradd -r -s /usr/sbin/nologin obslive
+# OBS 连接信息只在启动日志输出，查看：journalctl -u obs-live -n 30
+
+[Unit]
+Description=OBS Live (RTMP to HLS)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=obslive
+Group=obslive
+WorkingDirectory=/opt/obs-live
+EnvironmentFile=/opt/obs-live/.env
+ExecStart=/usr/bin/node server/index.js
+Restart=on-failure
+RestartSec=3
+# 实测单路约 180MB，限制到 512MB / 2 核，防止异常时拖垮 4GB 机器
+MemoryMax=512M
+CPUQuota=200%
+TasksMax=64
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
