@@ -1,0 +1,8 @@
+#!/bin/sh
+# 复制到 /home/obs_broadcast_web.git/hooks/post-receive 并 chmod +x
+# 每次 push 后自动检出 main 到工作目录并重启服务；依赖变更需手动 npm ci --omit=dev
+set -e
+
+git --git-dir=/home/obs_broadcast_web.git --work-tree=/opt/obs-live checkout -f main
+chown -R obslive:obslive /opt/obs-live
+systemctl restart obs-live
