@@ -1,6 +1,7 @@
 # 复制到 /etc/systemd/system/obs-live.service
 # 前提：代码放在 /opt/obs-live，配置在 /opt/obs-live/.env（参考 .env.example）
-# Node 需 >= 20，ExecStart 改成服务器上 `which node` 的结果
+# Node 需 >= 20，ExecStart 必须是全局可执行路径
+# 若 node 位于 /root/.nvm 下，低权限用户无法穿越 /root，需先复制二进制到 /usr/local/bin/node22
 # 用户需存在且能写工作目录与 HLS_DIR：useradd -r -s /usr/sbin/nologin obslive
 # OBS 连接信息只在启动日志输出，查看：journalctl -u obs-live -n 30
 
