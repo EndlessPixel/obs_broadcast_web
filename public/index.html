@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/styles.css">
   <script src="/vendor/hls.min.js" defer></script>
   <script src="/app.js" defer></script>
+  <script src="/chat.js" defer></script>
 </head>
 <body>
   <div class="glow glow-one"></div>
@@ -51,6 +52,7 @@
           <span>开播时长 <b id="uptime">--:--:--</b></span>
           <span>画质 <b id="resolution">--</b></span>
           <span>频道 <b id="channel-name">studio</b></span>
+          <span>在线 <b id="chat-online-meta">--</b></span>
         </div>
         <div class="player-actions">
           <button class="btn" id="mute-btn" type="button">取消静音</button>
@@ -59,6 +61,24 @@
         </div>
       </div>
       <p class="notice" id="notice" hidden></p>
+
+      <section class="chat-card" id="chat-card">
+        <div class="chat-head">
+          <h2>聊天</h2>
+          <div class="chat-head-right">
+            <span class="chat-online" id="chat-online">在线 -- 人</span>
+            <button class="btn btn-small" id="rename-btn" type="button">改名</button>
+          </div>
+        </div>
+        <div class="chat-messages" id="chat-messages" aria-live="polite">
+          <p class="chat-empty" id="chat-empty">还没有消息，来说第一句吧</p>
+        </div>
+        <form class="chat-input" id="chat-form">
+          <input id="chat-text" type="text" maxlength="200" autocomplete="off" placeholder="输入消息…" disabled>
+          <button class="btn btn-accent" id="chat-send" type="submit" disabled>发送</button>
+        </form>
+        <p class="chat-status" id="chat-status">连接中…</p>
+      </section>
     </section>
 
     <aside class="sidebar">
@@ -86,6 +106,17 @@
       </section>
     </aside>
   </main>
+
+  <div class="join-overlay" id="join-overlay" hidden>
+    <div class="join-box">
+      <h2>加入聊天</h2>
+      <p>输入一个用户名即可发言，无需密码或注册。</p>
+      <label class="join-label" for="join-name">用户名</label>
+      <input id="join-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" placeholder="例如 小明">
+      <p class="join-error" id="join-error" hidden></p>
+      <button class="btn btn-accent" id="join-btn" type="button">进入</button>
+    </div>
+  </div>
 
   <footer class="footer">OBS Live · 实时直播观看</footer>
 </body>

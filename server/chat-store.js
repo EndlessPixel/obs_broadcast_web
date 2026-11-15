@@ -1,0 +1,133 @@
+'use strict';
+
+const fs = require('node:fs');
+const path = require('node:path');
+
+const VALID_CHANNEL = /^[A-Za-z0-9_-]{1,48}$/;
+const ONLINE_TTL = 30 * 1000;
+const MESSAGE_LIMIT = 200;
+const MIN_SEND_INTERVAL = 800;
+const MAX_TEXT = 200;
+const MAX_NAME = 16;
+
+function clean(value, max) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .trim()
+    .slice(0, max);
+}
+
+class ChatStore {
+  constructor(config, log = console.log) {
+    this.log = log;
+    this.dir = path.join(config.dataDir, 'chat');
+    this.channels = new Map();
+    this.lastSent = new Map();
+    this.reset();
+  }
+
+  // 每次服务启动都清空：消息落磁盘，但生命周期只到本次运行结束
+  reset() {
+    fs.rmSync(this.dir, { recursive: true, force: true });
+    fs.mkdirSync(this.dir, { recursive: true });
+    this.channels.clear();
+    this.lastSent.clear();
+    this.epoch = String(Date.now());
+    this.log('评论区已清空（历史消息不跨重启保留）');
+  }
+
+  static validChannel(name) {
+    return typeof name === 'string' && VALID_CHANNEL.test(name);
+  }
+
+  channel(name) {
+    let item = this.channels.get(name);
+    if (!item) {
+      item = {
+        name,
+        file: path.join(this.dir, `${name}.jsonl`),
+        seq: 0,
+        messages: [],
+        online: new Map(),
+      };
+      this.channels.set(name, item);
+    }
+    return item;
+  }
+
+  prune(now = Date.now()) {
+    for (const item of this.channels.values()) {
+      for (const [uid, entry] of item.online) {
+        if (now - entry.seen > ONLINE_TTL) item.online.delete(uid);
+      }
+    }
+    for (const [uid, ts] of this.lastSent) {
+      if (now - ts > 60 * 1000) this.lastSent.delete(uid);
+    }
+  }
+
+  // 轮询本身即心跳：带用户名和 uid 的拉取会计入在线
+  touch(name, uid, username) {
+    if (!ChatStore.validChannel(name)) return 0;
+    const item = this.channel(name);
+    const now = Date.now();
+    this.prune(now);
+    if (uid && username) {
+      item.online.set(uid, { name: username, seen: now });
+    }
+    return item.online.size;
+  }
+
+  leave(name, uid) {
+    if (!ChatStore.validChannel(name) || !uid) return;
+    const item = this.channel(name);
+    item.online.delete(uid);
+  }
+
+  onlineCount(name) {
+    if (!ChatStore.validChannel(name)) return 0;
+    this.prune();
+    return this.channel(name).online.size;
+  }
+
+  messages(name, since = 0) {
+    if (!ChatStore.validChannel(name)) return [];
+    const item = this.channel(name);
+    const from = Number.isFinite(since) && since > 0 ? Math.floor(since) : 0;
+    return item.messages.filter((message) => message.id > from).slice(-100);
+  }
+
+  post(name, payload) {
+    if (!ChatStore.validChannel(name)) {
+      return { ok: false, status: 400, error: '频道名不合法' };
+    }
+    const uid = clean(payload?.uid, 64);
+    const username = clean(payload?.name, MAX_NAME);
+    const text = clean(payload?.text, MAX_TEXT);
+    if (!uid || !username || !text) {
+      return { ok: false, status: 400, error: '需要用户名和消息内容' };
+    }
+
+    const now = Date.now();
+    const last = this.lastSent.get(uid) || 0;
+    if (now - last < MIN_SEND_INTERVAL) {
+      return { ok: false, status: 429, error: '发送太快了，稍等一下' };
+    }
+    this.lastSent.set(uid, now);
+
+    const item = this.channel(name);
+    const message = { id: ++item.seq, ts: now, user: username, text };
+    const line = `${JSON.stringify(message)}\n`;
+    try {
+      fs.appendFileSync(item.file, line, 'utf8');
+    } catch (err) {
+      this.log(`评论写入失败 (${name}): ${err.message}`);
+      return { ok: false, status: 500, error: '消息保存失败' };
+    }
+    item.messages.push(message);
+    if (item.messages.length > MESSAGE_LIMIT) item.messages.shift();
+    return { ok: true, message };
+  }
+}
+
+module.exports = ChatStore;

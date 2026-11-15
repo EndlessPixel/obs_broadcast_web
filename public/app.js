@@ -12,6 +12,17 @@ const state = {
   retryTimer: null,
 };
 
+let lastChatChannel = '';
+function syncChatChannel() {
+  if (!state.channel) return;
+  window.obsLiveChannel = state.channel;
+  if (state.channel !== lastChatChannel) {
+    lastChatChannel = state.channel;
+    document.dispatchEvent(new CustomEvent('channelchange', { detail: { channel: state.channel } }));
+  }
+}
+syncChatChannel();
+
 function duration(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
   const pad = (n) => String(n).padStart(2, '0');
@@ -76,6 +87,7 @@ function selectChannel(name, pin) {
   const params = new URLSearchParams(location.search);
   params.set('channel', name);
   history.replaceState(null, '', `${location.pathname}?${params.toString()}`);
+  syncChatChannel();
   detachPlayer();
   renderChannels();
   renderPlayer();
@@ -179,6 +191,7 @@ async function refresh() {
       }
     }
 
+    syncChatChannel();
     $('#segment-tag').textContent = `分片 ${data.defaults.hlsTime}s`;
     renderCapacity(data.capacity);
     renderChannels();

@@ -2,14 +2,17 @@
 
 const express = require('express');
 const os = require('node:os');
+const path = require('node:path');
 const NodeMediaServer = require('node-media-server');
 const nmsLogger = require('node-media-server/src/core/logger.js');
 const { rateSampler } = require('node-media-server/src/core/rate_sampler.js');
 const config = require('./config');
 const StreamManager = require('./stream-manager');
+const ChatStore = require('./chat-store');
 
 const log = (message) => console.log(`[live ${new Date().toLocaleTimeString('zh-CN')}] ${message}`);
 const manager = new StreamManager(config, log);
+const chat = new ChatStore(config, log);
 const recommendedBitrateKbps = Math.min(3000, Math.round(config.uplinkMbps * 200));
 
 function lanAddresses() {
@@ -111,6 +114,41 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, channels: manager.list().length });
 });
 
+// 评论区：按频道隔离，写入 data/chat/<频道>.jsonl，服务重启即清空
+app.use('/api/chat', express.json({ limit: '4kb' }));
+app.get('/api/chat/:channel', (req, res) => {
+  const channelName = req.params.channel;
+  if (!ChatStore.validChannel(channelName)) {
+    return res.status(400).json({ ok: false, error: '频道名不合法' });
+  }
+  const since = Number.parseInt(String(req.query.since || '0'), 10) || 0;
+  const uid = String(req.query.uid || '').slice(0, 64);
+  const username = String(req.query.name || '').slice(0, 16);
+  const online = chat.touch(channelName, uid, username);
+  res.set('Cache-Control', 'no-store');
+  res.json({ ok: true, epoch: chat.epoch, messages: chat.messages(channelName, since), online });
+});
+
+app.post('/api/chat/:channel', (req, res) => {
+  const channelName = req.params.channel;
+  if (!ChatStore.validChannel(channelName)) {
+    return res.status(400).json({ ok: false, error: '频道名不合法' });
+  }
+  const result = chat.post(channelName, req.body);
+  res.status(result.status || 200).json(result.ok
+    ? { ok: true, message: result.message }
+    : { ok: false, error: result.error });
+});
+
+app.post('/api/chat/:channel/leave', (req, res) => {
+  const channelName = req.params.channel;
+  if (!ChatStore.validChannel(channelName)) {
+    return res.status(400).json({ ok: false, error: '频道名不合法' });
+  }
+  chat.leave(channelName, String(req.body?.uid || '').slice(0, 64));
+  res.json({ ok: true });
+});
+
 app.use(express.static(config.publicDir, { index: 'index.html', maxAge: 0 }));
 
 const server = app.listen(config.httpPort, '0.0.0.0', () => {
@@ -129,6 +167,7 @@ const server = app.listen(config.httpPort, '0.0.0.0', () => {
   log(`  观看页:   http://${host}:${config.httpPort}`);
   log(`  建议码率: ${recommendedBitrateKbps} Kbps / 上行 ${config.uplinkMbps}Mbps / 最多 ${config.maxStreams} 路`);
   log(`  HLS 目录: ${config.hlsDir}`);
+  log(`  评论区: ${path.join(config.dataDir, 'chat')}（按频道隔离，重启清空）`);
   if (config.streamToken) log('  注意: 日志包含密钥，请限制终端 / journald 的访问权限');
   else log('  提示: 公网部署请设置 STREAM_TOKEN，并只向推流端开放 1935 端口');
 });
