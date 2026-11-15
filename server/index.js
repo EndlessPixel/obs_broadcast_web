@@ -149,6 +149,7 @@ app.post('/api/chat/:channel/leave', (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/favicon.ico', (_req, res) => res.status(204).end());
 app.use(express.static(config.publicDir, { index: 'index.html', maxAge: 0 }));
 
 const server = app.listen(config.httpPort, '0.0.0.0', () => {

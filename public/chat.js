@@ -1,3 +1,5 @@
+/* 独立作用域：app.js 也在全局声明了 const $，defer 脚本共享全局词法环境，重复声明会让整个脚本不执行 */
+(() => {
 'use strict';
 
 const $ = (selector) => document.querySelector(selector);
@@ -214,3 +216,4 @@ if (username) setJoined(true);
 else showJoin();
 poll();
 setInterval(poll, 2000);
+})();
