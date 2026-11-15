@@ -352,6 +352,14 @@ h1 { margin: 0; font-size: clamp(24px, 3vw, 34px); font-weight: 700; letter-spac
 
 .hint { margin: 12px 0 0; font-size: 11px; line-height: 1.7; color: var(--muted); }
 .hint[hidden] { display: none; }
+.bandwidth-hint {
+  color: #ffd894;
+  background: rgba(255, 196, 92, 0.08);
+  border: 1px solid rgba(255, 196, 92, 0.22);
+  border-radius: 9px;
+  padding: 8px 10px;
+}
+.bandwidth-hint.warn { color: #ff9db1; background: rgba(255, 66, 107, 0.09); border-color: rgba(255, 66, 107, 0.28); }
 .capacity {
   margin-top: 14px;
   display: grid;

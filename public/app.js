@@ -72,9 +72,25 @@ function renderCapacity(capacity) {
   const channel = state.channels.find((item) => item.name === state.channel) || state.channels[0];
   const inBps = channel && channel.inBps > 0 ? channel.inBps : 0;
   $('#in-bitrate').textContent = inBps ? `${(inBps * 8 / 1e6).toFixed(2)} Mbps` : '--';
-  // 预留 15% 给协议开销和页面请求，HLS 每位观众消耗一份推流码率
-  const viewers = inBps ? Math.floor((cap.uplinkMbps || 0) * 1e6 * 0.85 / (inBps * 8)) : 0;
-  $('#max-viewers').textContent = inBps ? `≤ ${viewers} 人` : '--';
+
+  const hasCapacity = Number.isFinite(cap.maxViewers);
+  const viewers = hasCapacity
+    ? cap.maxViewers
+    : (inBps ? Math.floor((cap.uplinkMbps || 0) * 1e6 * 0.85 / (inBps * 8)) : 0);
+  $('#max-viewers').textContent = (inBps || hasCapacity) ? `≤ ${viewers} 人` : '--';
+
+  const hint = $('#bandwidth-hint');
+  if (cap.overBitrate) {
+    hint.textContent = `当前码率 ${cap.currentBitrateKbps} Kbps 高于建议 ${cap.recommendedBitrateKbps} Kbps，请在 OBS 降低码率，否则观众容易卡顿。`;
+    hint.classList.add('warn');
+    hint.hidden = false;
+  } else if (cap.lowBandwidth) {
+    hint.textContent = `${cap.uplinkMbps}Mbps 上行：建议码率 ≤ ${cap.recommendedBitrateKbps} Kbps，已启用省流轮询。`;
+    hint.classList.remove('warn');
+    hint.hidden = false;
+  } else {
+    hint.hidden = true;
+  }
 }
 
 function selectChannel(name, pin) {
@@ -226,4 +242,4 @@ setInterval(() => {
 }, 1000);
 
 refresh();
-setInterval(refresh, 3000);
+setInterval(refresh, 4000);

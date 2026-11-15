@@ -74,12 +74,12 @@ const app = express();
 app.disable('x-powered-by');
 app.use('/vendor', express.static(config.vendorDir, { maxAge: '7d', index: false }));
 
-// HLS 播放列表必须不缓存，分片短缓存即可
+// 播放列表允许重验证（内容未变时 express.static 返回 304 无响应体），分片短缓存
 app.use('/hls', express.static(config.hlsDir, {
   index: false,
   setHeaders(res, filePath) {
     if (filePath.endsWith('.m3u8')) {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate, max-age=0');
     } else {
       res.setHeader('Cache-Control', 'public, max-age=2');
     }
@@ -92,6 +92,13 @@ app.get('/api/state', (_req, res) => {
     ...channel,
     inBps: rateSampler.getStreamRates(`/${config.rtmpApp}/${channel.name}`).inBps,
   }));
+  // 每位 HLS 观众消耗一份推流码率；预留 15% 给协议开销与页面请求
+  const liveChannel = channels.find((channel) => channel.inBps > 0);
+  const currentBitrateKbps = liveChannel ? Math.round(liveChannel.inBps * 8 / 1000) : 0;
+  const usableBps = config.uplinkMbps * 1e6 * 0.85;
+  const maxViewers = currentBitrateKbps > 0
+    ? Math.max(0, Math.floor(usableBps / (currentBitrateKbps * 1000)))
+    : null;
   res.set('Cache-Control', 'no-store');
   res.json({
     ok: true,
@@ -100,6 +107,10 @@ app.get('/api/state', (_req, res) => {
       uplinkMbps: config.uplinkMbps,
       maxStreams: config.maxStreams,
       recommendedBitrateKbps,
+      lowBandwidth: config.uplinkMbps <= 10,
+      currentBitrateKbps,
+      maxViewers,
+      overBitrate: currentBitrateKbps > recommendedBitrateKbps * 1.15,
     },
     defaults: {
       channel: config.defaultChannel,
@@ -167,6 +178,7 @@ const server = app.listen(config.httpPort, '0.0.0.0', () => {
   log(`  串流密钥: ${streamKey}${config.streamToken ? '' : '（未启用鉴权）'}`);
   log(`  观看页:   http://${host}:${config.httpPort}`);
   log(`  建议码率: ${recommendedBitrateKbps} Kbps / 上行 ${config.uplinkMbps}Mbps / 最多 ${config.maxStreams} 路`);
+  log(`  省流模式: ${config.uplinkMbps <= 10 ? '已启用（轮询间隔拉长，页面显示码率超限提示）' : '关闭'}`);
   log(`  HLS 目录: ${config.hlsDir}`);
   log(`  评论区: ${path.join(config.dataDir, 'chat')}（按频道隔离，重启清空）`);
   if (config.streamToken) log('  注意: 日志包含密钥，请限制终端 / journald 的访问权限');

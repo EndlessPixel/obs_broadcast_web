@@ -249,6 +249,6 @@ if (username) setJoined(true);
 else showJoin();
 refreshChannels();
 poll();
-setInterval(poll, 2000);
-setInterval(refreshChannels, 15000);
+setInterval(poll, 3000);
+setInterval(refreshChannels, 20000);
 })();

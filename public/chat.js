@@ -215,5 +215,5 @@ window.addEventListener('pagehide', leaveCurrent);
 if (username) setJoined(true);
 else showJoin();
 poll();
-setInterval(poll, 2000);
+setInterval(poll, 3000);
 })();

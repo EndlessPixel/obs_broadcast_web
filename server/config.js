@@ -40,8 +40,8 @@ module.exports = {
   hlsListSize: intEnv('HLS_LIST_SIZE', 5),
   // 4GB 小机器上限制并发推流数量，避免多个 ffmpeg 同时占用内存
   maxStreams: intEnv('MAX_STREAMS', 3),
-  // 服务器上行带宽，用于页面估算可承载观看人数
-  uplinkMbps: floatEnv('UPLINK_MBPS', 16),
+  // 服务器上行带宽（实测 8Mbps），用于建议码率与可承载观看人数估算
+  uplinkMbps: floatEnv('UPLINK_MBPS', 8),
   ffmpeg: process.env.FFMPEG || 'ffmpeg',
   publicDir: path.join(root, 'public'),
   // 生产环境可设 HLS_DIR=/dev/shm/obs-live-hls，分片写内存盘，避免磁盘 IO
