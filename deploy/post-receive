@@ -1,8 +1,32 @@
 #!/bin/sh
 # 复制到 /home/obs_broadcast_web.git/hooks/post-receive 并 chmod +x
-# 每次 push 后自动检出 main 到工作目录并重启服务；依赖变更需手动 npm ci --omit=dev
+# 每次 push 检出 main 到 /opt/obs-live；只有 server/ 下的运行时代码变更才重启服务。
+# 纯前端静态文件由 express.static 实时读盘，无需重启、不会清空评论或打断推流。
 set -e
 
-git --git-dir=/home/obs_broadcast_web.git --work-tree=/opt/obs-live checkout -f main
-chown -R obslive:obslive /opt/obs-live
-systemctl restart obs-live
+GIT_DIR=/home/obs_broadcast_web.git
+WORK=/opt/obs-live
+
+read old new ref || true
+
+git --git-dir=$GIT_DIR --work-tree=$WORK checkout -f main
+chown -R obslive:obslive "$WORK"
+
+restart=0
+case "$old" in
+  000000*) restart=1 ;;
+esac
+
+changed=$(git --git-dir=$GIT_DIR diff --name-only "$old" "$new" 2>/dev/null || true)
+for file in $changed; do
+  case "$file" in
+    server/*) restart=1 ;;
+  esac
+done
+
+if [ "$restart" -eq 1 ]; then
+  systemctl restart obs-live
+  echo "后端代码变更：已重启 obs-live"
+else
+  echo "仅静态 / 配置文件变更：已检出，express.static 实时生效，未重启服务"
+fi

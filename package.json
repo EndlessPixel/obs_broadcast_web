@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node --check server/index.js && node --check server/config.js && node --check server/stream-manager.js && node --check server/chat-store.js && node --check public/app.js && node --check public/chat.js"
+    "test": "node --check server/index.js && node --check server/config.js && node --check server/stream-manager.js && node --check server/chat-store.js && node --check public/app.js && node --check public/chat.js && node --check public/chat/chat-room.js"
   },
   "engines": {
     "node": ">=20"

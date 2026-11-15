@@ -369,6 +369,37 @@ h1 { margin: 0; font-size: clamp(24px, 3vw, 34px); font-weight: 700; letter-spac
 }
 .capacity b { display: block; margin-top: 4px; font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums; }
 
+.chat-room-page { min-height: 100vh; display: flex; flex-direction: column; }
+.chat-room {
+  width: min(1100px, 100%);
+  margin: 0 auto;
+  padding: 12px 32px 28px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+.chat-room-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.chat-room-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.chat-room-tools label { font-size: 11px; color: var(--muted); }
+.chat-room-tools select {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(8, 11, 20, 0.75);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.chat-room-tools select:focus { border-color: rgba(56, 217, 240, 0.6); }
+.chat-room-card { margin-top: 0; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.chat-room-card .chat-messages { flex: 1; height: auto; min-height: 280px; }
+.chat-room-page .chat-input input { font-size: 13px; padding: 11px 12px; }
+.chat-room-page .chat-message { font-size: 13.5px; }
+.chat-room > .hint { margin: 0; }
+
 .footer { text-align: center; padding: 0 20px 28px; color: #5f6a85; font-size: 11px; }
 
 @keyframes ripple {
@@ -390,4 +421,6 @@ h1 { margin: 0; font-size: clamp(24px, 3vw, 34px); font-weight: 700; letter-spac
   .player-bar { align-items: flex-start; }
   .chat-card { padding: 16px; }
   .chat-messages { height: 170px; }
+  .chat-room { padding: 10px 18px 24px; }
+  .chat-room-card .chat-messages { min-height: 200px; }
 }

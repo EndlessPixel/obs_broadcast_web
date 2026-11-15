@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0d16">
+  <link rel="icon" href="data:,">
+  <title>主播聊天室 · OBS Live</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/chat/chat-room.js" defer></script>
+</head>
+<body class="chat-room-page">
+  <div class="glow glow-one"></div>
+  <div class="glow glow-two"></div>
+
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-icon"><span></span></span>
+      <span>OBS<b>Live</b></span>
+    </a>
+    <div class="topbar-right">
+      <span class="server-pill" id="server-pill"><i></i><span id="server-text">连接中</span></span>
+      <a class="btn" href="/">返回直播</a>
+    </div>
+  </header>
+
+  <main class="chat-room">
+    <section class="chat-room-head">
+      <div>
+        <p class="eyebrow">STREAMER CHAT</p>
+        <h1>主播聊天室</h1>
+      </div>
+      <div class="chat-room-tools">
+        <label for="room-channel">频道</label>
+        <select id="room-channel" aria-label="选择频道"></select>
+        <span class="chat-online" id="chat-online">在线 -- 人</span>
+        <button class="btn btn-small" id="rename-btn" type="button">改名</button>
+      </div>
+    </section>
+
+    <section class="chat-card chat-room-card">
+      <div class="chat-messages" id="chat-messages" aria-live="polite">
+        <p class="chat-empty">还没有消息，等观众来说第一句吧</p>
+      </div>
+      <form class="chat-input" id="chat-form">
+        <input id="chat-text" type="text" maxlength="200" autocomplete="off" placeholder="输入消息…" disabled>
+        <button class="btn btn-accent" id="chat-send" type="submit" disabled>发送</button>
+      </form>
+      <p class="chat-status" id="chat-status">连接中…</p>
+    </section>
+
+    <p class="hint">本页不加载视频流，适合边推流边看评论。消息按频道隔离，服务重启后清空。</p>
+  </main>
+
+  <div class="join-overlay" id="join-overlay" hidden>
+    <div class="join-box">
+      <h2>加入聊天</h2>
+      <p>输入一个用户名即可发言，无需密码或注册。</p>
+      <label class="join-label" for="join-name">用户名</label>
+      <input id="join-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" placeholder="例如 主播">
+      <p class="join-error" id="join-error" hidden></p>
+      <button class="btn btn-accent" id="join-btn" type="button">进入</button>
+    </div>
+  </div>
+</body>
+</html>
