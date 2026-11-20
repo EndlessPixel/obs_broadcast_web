@@ -9,10 +9,15 @@ const { rateSampler } = require('node-media-server/src/core/rate_sampler.js');
 const config = require('./config');
 const StreamManager = require('./stream-manager');
 const ChatStore = require('./chat-store');
+const HistoryStore = require('./history-store');
 
 const log = (message) => console.log(`[live ${new Date().toLocaleTimeString('zh-CN')}] ${message}`);
 const manager = new StreamManager(config, log);
 const chat = new ChatStore(config, log);
+const history = new HistoryStore(config, log);
+manager.onSignalLost = (channel) => {
+  history.endByChannel(channel.name, channel.session?.id, channel.session);
+};
 const recommendedBitrateKbps = Math.min(3000, Math.round(config.uplinkMbps * 200));
 
 function lanAddresses() {
@@ -65,9 +70,13 @@ nms.on('postPublish', (session) => {
     return;
   }
   manager.start(name, session);
+  history.start(session.id, name, session);
 });
 
-nms.on('donePublish', (session) => manager.stop(session.streamName));
+nms.on('donePublish', (session) => {
+  history.end(session.id, session);
+  manager.stop(session.streamName);
+});
 nms.run();
 
 const app = express();
@@ -123,6 +132,13 @@ app.get('/api/state', (_req, res) => {
 app.get('/api/health', (_req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json({ ok: true, channels: manager.list().length });
+});
+
+// 开播历史：服务端统计，持久化到 data/history.jsonl
+app.get('/api/history', (req, res) => {
+  const limit = Number.parseInt(String(req.query.limit || '30'), 10) || 30;
+  res.set('Cache-Control', 'no-store');
+  res.json({ ok: true, history: history.list(Math.min(Math.max(limit, 1), 100)) });
 });
 
 // 评论区：按频道隔离，写入 data/chat/<频道>.jsonl，服务重启即清空
@@ -203,6 +219,7 @@ const server = app.listen(config.httpPort, '0.0.0.0', () => {
   log(`  省流模式: ${config.uplinkMbps <= 10 ? '已启用（轮询间隔拉长，页面显示码率超限提示）' : '关闭'}`);
   log(`  HLS 目录: ${config.hlsDir}`);
   log(`  评论区: ${path.join(config.dataDir, 'chat')}（按频道隔离，重启清空）`);
+  log(`  开播历史: ${path.join(config.dataDir, 'history.jsonl')}（服务端统计，重启保留）`);
   log(`  主播标识: ${config.hostToken ? '已启用（口令来自 HOST_TOKEN / STREAM_TOKEN）' : '未启用'}`);
   if (config.streamToken) log('  注意: 日志包含密钥，请限制终端 / journald 的访问权限');
   else log('  提示: 公网部署请设置 STREAM_TOKEN，并只向推流端开放 1935 端口');

@@ -65,6 +65,50 @@ function renderChannels() {
   }
 }
 
+function shortTime(ts) {
+  const date = new Date(ts);
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function renderHistory(list) {
+  const el = $('#history-list');
+  $('#history-count').textContent = String(list.length);
+  if (!list.length) {
+    el.innerHTML = '<p class="empty">暂无开播记录</p>';
+    return;
+  }
+  el.replaceChildren();
+  for (const item of list) {
+    const row = document.createElement('div');
+    row.className = `history-item${item.ongoing ? ' ongoing' : ''}`;
+    const dot = document.createElement('span');
+    dot.className = 'history-dot';
+    const main = document.createElement('div');
+    main.className = 'history-main';
+    const title = document.createElement('strong');
+    title.textContent = item.channel;
+    const sub = document.createElement('small');
+    const quality = item.width && item.height ? ` · ${item.width}×${item.height}` : '';
+    sub.textContent = `${shortTime(item.startedAt)} 开播${quality}`;
+    main.append(title, sub);
+    const time = document.createElement('span');
+    time.className = 'history-time';
+    time.textContent = item.ongoing ? `直播中 ${duration(item.durationMs)}` : duration(item.durationMs);
+    row.append(dot, main, time);
+    el.appendChild(row);
+  }
+}
+
+async function refreshHistory() {
+  try {
+    const response = await fetch('/api/history?limit=20', { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = await response.json();
+    if (Array.isArray(data.history)) renderHistory(data.history);
+  } catch (_err) { /* 历史加载失败不影响播放器 */ }
+}
+
 function renderCapacity(capacity) {
   const cap = capacity || {};
   $('#uplink').textContent = `${cap.uplinkMbps || '--'} Mbps`;
@@ -242,4 +286,6 @@ setInterval(() => {
 }, 1000);
 
 refresh();
+refreshHistory();
 setInterval(refresh, 4000);
+setInterval(refreshHistory, 15000);

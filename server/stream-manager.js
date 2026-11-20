@@ -160,6 +160,7 @@ class StreamManager {
       const limit = channel.lastOutputAt ? this.staleMs : (channel.failures > 0 ? 4000 : this.startupMs);
       if (Date.now() - idleSince > limit) {
         this.log(`频道 ${channel.name} ${channel.lastOutputAt ? '分片停止更新' : '未收到推流数据'}，重启转封装`);
+        if (channel.lastOutputAt && this.onSignalLost) this.onSignalLost(channel);
         channel.ready = false;
         this.kill(channel);
         channel.process = null;
