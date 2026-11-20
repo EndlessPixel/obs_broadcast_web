@@ -34,6 +34,8 @@
         <label for="room-channel">频道</label>
         <select id="room-channel" aria-label="选择频道"></select>
         <span class="chat-online" id="chat-online">在线 -- 人</span>
+        <span class="host-state" id="host-state" hidden>主播</span>
+        <button class="btn btn-small" id="host-btn" type="button">主播验证</button>
         <button class="btn btn-small" id="rename-btn" type="button">改名</button>
       </div>
     </section>
@@ -60,6 +62,18 @@
       <input id="join-name" type="text" maxlength="16" autocomplete="off" spellcheck="false" placeholder="例如 主播">
       <p class="join-error" id="join-error" hidden></p>
       <button class="btn btn-accent" id="join-btn" type="button">进入</button>
+    </div>
+  </div>
+
+  <div class="join-overlay" id="host-overlay" hidden>
+    <div class="join-box">
+      <h2>主播身份验证</h2>
+      <p>输入服务器终端里的主播口令（默认与 STREAM_TOKEN 相同）。验证后你的消息会带「主播」标识；口令只保存在本机浏览器，不进 URL 或服务器日志。</p>
+      <label class="join-label" for="host-token">主播口令</label>
+      <input id="host-token" type="password" maxlength="128" autocomplete="off" placeholder="仅存本机浏览器">
+      <p class="join-error" id="host-error" hidden></p>
+      <button class="btn btn-accent" id="host-verify-btn" type="button">验证</button>
+      <button class="btn" id="host-cancel-btn" type="button">取消</button>
     </div>
   </div>
 </body>

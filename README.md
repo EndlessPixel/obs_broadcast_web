@@ -58,6 +58,7 @@ npm start
 - **容量感知**：按实时推流码率估算可承载观众数，码率超限时页面给出告警
 - **按频道隔离的评论区**：消息落磁盘 JSONL，服务重启即清空；用户名免注册、无密码
 - **在线人数**：轮询兼心跳，30 秒无响应自动离线，按频道分别统计
+- **主播身份认证**：口令由服务端校验，消息带 `role: host` 并显示「主播」徽章；观众无法靠改名冒充
 - **主播聊天室**：`/chat` 独立页面，不加载视频、不请求 HLS，适合边推流边看评论
 - **连接信息不外泄**：推流地址、端口、Token 只在启动日志 / `journalctl` 中显示
 - **零依赖前端**：原生 HTML/CSS/JS + 本地 `hls.js`，无构建步骤
@@ -146,6 +147,7 @@ npm start
 | `HTTP_PORT` | `3100` | Web 服务端口，建议只对本机 / 反向代理开放 |
 | `RTMP_PORT` | `1935` | OBS 推流端口 |
 | `STREAM_TOKEN` | 空 | 为空表示不校验；设置后串流密钥需写成 `频道名?token=值` |
+| `HOST_TOKEN` | 空 | 主播聊天身份验证口令；留空则复用 `STREAM_TOKEN`，两者都为空时不启用主播标识 |
 | `UPLINK_MBPS` | `8` | 服务器实际上行带宽，用于建议码率与观看人数估算；`<=10` 自动启用省流轮询 |
 | `MAX_STREAMS` | `3` | 最大并发频道数，每个频道一个轻量 ffmpeg 进程 |
 | `HLS_TIME` | `2` | 分片时长（秒），越小延迟越低 |
@@ -187,15 +189,23 @@ npm start
 - 服务端重启后返回新的 `epoch`，已打开的页面会自动重置消息游标
 - 所有用户内容用 `textContent` 渲染，避免 XSS
 
+主播身份：
+
+- 主播在 `/chat` 页面点「主播验证」，输入服务器终端里的主播口令（默认与 `STREAM_TOKEN` 相同）
+- 服务端校验通过后把该浏览器 `uid` 标记为主播（12 小时有效期，服务重启即失效），之后消息带 `role: host` 并显示红色「主播」徽章
+- 身份由服务端下发，**观众即使把用户名改成「主播」也不会有徽章**；客户端传来的 `role` / `host` 字段一律忽略
+- 口令只保存在本机浏览器、通过 POST 提交，不进 URL、不进服务器日志；连续 5 次验证失败会限流 1 分钟
+
 ## HTTP API
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | `GET` | `/api/state` | 在线频道、实时码率、`capacity`（上行 / 建议码率 / 观看上限 / 是否超限） |
 | `GET` | `/api/health` | 健康检查与在线频道数 |
-| `GET` | `/api/chat/:channel?since=&uid=&name=` | 拉取新消息、更新心跳，返回 `epoch` / `messages` / `online` |
-| `POST` | `/api/chat/:channel` | 发送消息，body 为 `{ uid, name, text }` |
+| `GET` | `/api/chat/:channel?since=&uid=&name=` | 拉取新消息、更新心跳，返回 `epoch` / `messages` / `online` / `isHost` |
+| `POST` | `/api/chat/:channel` | 发送消息，body 为 `{ uid, name, text }`；身份由服务端判定 |
 | `POST` | `/api/chat/:channel/leave` | 离开频道，body 为 `{ uid }` |
+| `POST` | `/api/chat/host/verify` | 主播身份验证，body 为 `{ uid, token }` |
 | `GET` | `/hls/:channel/index.m3u8` | HLS 播放列表（静态文件） |
 
 API **不返回** RTMP 地址、端口或推流 Token。
@@ -265,6 +275,7 @@ journalctl -u obs-live -n 30
 - 建议把 `1935` 限制为只允许推流端 IP，Web 端口只对本机 / 反向代理开放
 - 启动日志包含完整串流密钥，请限制终端输出与 `journald` 的读取权限
 - 不要把 `.env`、真实 Token 或服务器凭据提交到仓库
+- 主播口令通过 `POST /api/chat/host/verify` 提交，不出现在 URL 和日志中；主播浏览器本地会保存一份，共用设备请注意退出
 - 评论内容不经过转义直接落盘，但前端使用 `textContent` 渲染，不会执行 HTML
 
 ## 常见问题
@@ -281,9 +292,13 @@ journalctl -u obs-live -n 30
 
 这是出口带宽耗尽，不是 CPU 或内存问题。降低 OBS 码率，或限制观看人数；需要更多并发请使用 CDN。
 
+### 观众冒充主播名字
+
+身份不看名字文本，只看服务端下发的 `role`。观众输入「主播」两个字也不会有徽章；只有持有主播口令并通过 `POST /api/chat/host/verify` 的浏览器，发出的消息才会被服务端标记为 `host`。若未设置 `STREAM_TOKEN` / `HOST_TOKEN`，主播标识功能不可用。
+
 ### 重启后评论没了
 
-设计如此：评论写入磁盘文件，但服务启动时 `ChatStore.reset()` 会清空，不跨重启保留。
+设计如此：评论写入磁盘文件，但服务启动时 `ChatStore.reset()` 会清空，不跨重启保留；主播身份验证状态也会失效，重新打开 `/chat` 会用口令自动重新验证。
 
 ### HTTPS 页面无法播放
 

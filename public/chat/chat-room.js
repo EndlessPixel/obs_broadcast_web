@@ -5,6 +5,7 @@
 const $ = (selector) => document.querySelector(selector);
 const USER_KEY = 'obs-live-chat-user';
 const UID_KEY = 'obs-live-chat-uid';
+const HOST_TOKEN_KEY = 'obs-live-chat-host-token';
 const VALID_CHANNEL = /^[A-Za-z0-9_-]{1,48}$/;
 
 function storageGet(key) {
@@ -44,6 +45,11 @@ const channelSelect = $('#room-channel');
 const joinOverlay = $('#join-overlay');
 const joinName = $('#join-name');
 const joinError = $('#join-error');
+const hostOverlay = $('#host-overlay');
+const hostTokenInput = $('#host-token');
+const hostError = $('#host-error');
+const hostState = $('#host-state');
+const hostBtn = $('#host-btn');
 
 function setStatus(text) { statusEl.textContent = text; }
 function setOnline(count) { onlineEl.textContent = `在线 ${count} 人`; }
@@ -56,6 +62,46 @@ function setJoined(joined) {
   textEl.disabled = !joined;
   sendEl.disabled = !joined;
   joinOverlay.hidden = joined;
+}
+
+function setHostState(isHost) {
+  hostState.hidden = !isHost;
+  hostBtn.textContent = isHost ? '已验证' : '主播验证';
+}
+
+function showHostVerify(errorText = '') {
+  hostTokenInput.value = storageGet(HOST_TOKEN_KEY);
+  hostError.textContent = errorText;
+  hostError.hidden = !errorText;
+  hostOverlay.hidden = false;
+  setTimeout(() => hostTokenInput.focus(), 0);
+}
+
+async function verifyHost(token) {
+  const secret = String(token || '').trim();
+  if (!secret) {
+    showHostVerify('请输入主播口令');
+    return;
+  }
+  try {
+    const response = await fetch('/api/chat/host/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid, token: secret }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      showHostVerify(data.error || '验证失败');
+      return;
+    }
+    storageSet(HOST_TOKEN_KEY, secret);
+    hostOverlay.hidden = true;
+    setHostState(true);
+    setStatus('主播身份已验证');
+    poll();
+  } catch (_err) {
+    showHostVerify('网络异常，稍后再试');
+  }
 }
 
 function formatTime(ts) {
@@ -87,6 +133,13 @@ function appendMessage(message) {
   const text = document.createElement('span');
   text.className = 'chat-text';
   text.textContent = message.text;
+  // 主播标记只能来自服务端 role 字段，名字文本本身不作身份依据
+  if (message.role === 'host') {
+    const badge = document.createElement('span');
+    badge.className = 'chat-badge-host';
+    badge.textContent = '主播';
+    row.appendChild(badge);
+  }
   row.append(time, user, text);
   messagesEl.appendChild(row);
 
@@ -120,6 +173,7 @@ async function poll() {
       }
     }
     setOnline(Number(data.online) || 0);
+    setHostState(Boolean(data.isHost));
     setStatus(username ? '已连接' : '只读，输入用户名后可发言');
     serverStatus(true);
   } catch (_err) {
@@ -240,6 +294,12 @@ joinName.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') submitJoin();
 });
 $('#rename-btn').addEventListener('click', () => showJoin());
+hostBtn.addEventListener('click', () => showHostVerify());
+$('#host-verify-btn').addEventListener('click', () => verifyHost(hostTokenInput.value));
+$('#host-cancel-btn').addEventListener('click', () => { hostOverlay.hidden = true; });
+hostTokenInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') verifyHost(hostTokenInput.value);
+});
 channelSelect.addEventListener('change', () => switchChannel(channelSelect.value));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 window.addEventListener('pagehide', leaveCurrent);
@@ -247,6 +307,8 @@ window.addEventListener('pagehide', leaveCurrent);
 renderChannelOptions([]);
 if (username) setJoined(true);
 else showJoin();
+const savedHostToken = storageGet(HOST_TOKEN_KEY);
+if (savedHostToken) verifyHost(savedHostToken);
 refreshChannels();
 poll();
 setInterval(poll, 3000);

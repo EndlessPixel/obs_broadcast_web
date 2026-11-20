@@ -35,6 +35,8 @@ module.exports = {
   rtmpApp: 'live',
   // 为空表示不校验推流密钥；设置后 OBS 的串流密钥需写成 "频道名?token=<STREAM_TOKEN>"
   streamToken: process.env.STREAM_TOKEN || '',
+  // 主播聊天身份验证口令。留空则回落到 STREAM_TOKEN；两者都为空时不启用主播标识
+  hostToken: process.env.HOST_TOKEN || process.env.STREAM_TOKEN || '',
   defaultChannel: 'studio',
   hlsTime: intEnv('HLS_TIME', 2),
   hlsListSize: intEnv('HLS_LIST_SIZE', 5),

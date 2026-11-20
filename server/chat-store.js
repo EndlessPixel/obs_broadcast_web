@@ -9,6 +9,9 @@ const MESSAGE_LIMIT = 200;
 const MIN_SEND_INTERVAL = 800;
 const MAX_TEXT = 200;
 const MAX_NAME = 16;
+const HOST_TTL = 12 * 60 * 60 * 1000;
+const VERIFY_WINDOW = 60 * 1000;
+const MAX_VERIFY_ATTEMPTS = 5;
 
 function clean(value, max) {
   return String(value ?? '')
@@ -23,6 +26,8 @@ class ChatStore {
     this.dir = path.join(config.dataDir, 'chat');
     this.channels = new Map();
     this.lastSent = new Map();
+    this.hosts = new Map();
+    this.verifyAttempts = new Map();
     this.reset();
   }
 
@@ -32,6 +37,8 @@ class ChatStore {
     fs.mkdirSync(this.dir, { recursive: true });
     this.channels.clear();
     this.lastSent.clear();
+    this.hosts.clear();
+    this.verifyAttempts.clear();
     this.epoch = String(Date.now());
     this.log('评论区已清空（历史消息不跨重启保留）');
   }
@@ -64,6 +71,50 @@ class ChatStore {
     for (const [uid, ts] of this.lastSent) {
       if (now - ts > 60 * 1000) this.lastSent.delete(uid);
     }
+    for (const [uid, expiry] of this.hosts) {
+      if (expiry <= now) this.hosts.delete(uid);
+    }
+    for (const [uid, entry] of this.verifyAttempts) {
+      if (now - entry.at > VERIFY_WINDOW) this.verifyAttempts.delete(uid);
+    }
+  }
+
+  // 主播凭据只由服务端校验，客户端无法自行声明身份
+  verifyHost(uid, token, expected) {
+    if (!expected) {
+      return { ok: false, status: 400, error: '服务器未启用主播身份验证' };
+    }
+    if (!uid) {
+      return { ok: false, status: 400, error: '缺少客户端标识' };
+    }
+    const now = Date.now();
+    this.prune(now);
+    let attempt = this.verifyAttempts.get(uid);
+    if (!attempt || now - attempt.at > VERIFY_WINDOW) {
+      attempt = { at: now, count: 0 };
+      this.verifyAttempts.set(uid, attempt);
+    }
+    attempt.count += 1;
+    if (attempt.count > MAX_VERIFY_ATTEMPTS) {
+      return { ok: false, status: 429, error: '尝试次数过多，稍后再试' };
+    }
+    if (String(token ?? '') !== expected) {
+      return { ok: false, status: 401, error: '主播口令不正确' };
+    }
+    this.verifyAttempts.delete(uid);
+    this.hosts.set(uid, now + HOST_TTL);
+    return { ok: true };
+  }
+
+  isHost(uid, now = Date.now()) {
+    if (!uid) return false;
+    const expiry = this.hosts.get(uid);
+    if (!expiry) return false;
+    if (expiry <= now) {
+      this.hosts.delete(uid);
+      return false;
+    }
+    return true;
   }
 
   // 轮询本身即心跳：带用户名和 uid 的拉取会计入在线
@@ -115,8 +166,10 @@ class ChatStore {
     }
     this.lastSent.set(uid, now);
 
+    // 身份完全由服务端决定，忽略客户端传来的任何 role / host 字段
+    const role = this.isHost(uid, now) ? 'host' : 'viewer';
     const item = this.channel(name);
-    const message = { id: ++item.seq, ts: now, user: username, text };
+    const message = { id: ++item.seq, ts: now, user: username, text, role };
     const line = `${JSON.stringify(message)}\n`;
     try {
       fs.appendFileSync(item.file, line, 'utf8');

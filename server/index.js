@@ -127,6 +127,19 @@ app.get('/api/health', (_req, res) => {
 
 // 评论区：按频道隔离，写入 data/chat/<频道>.jsonl，服务重启即清空
 app.use('/api/chat', express.json({ limit: '4kb' }));
+
+// 主播身份验证：仅服务端判定，口令不出现在 URL 或日志
+app.post('/api/chat/host/verify', (req, res) => {
+  const result = chat.verifyHost(
+    String(req.body?.uid || '').slice(0, 64),
+    String(req.body?.token || '').slice(0, 128),
+    config.hostToken
+  );
+  res.status(result.status || 200).json(result.ok
+    ? { ok: true }
+    : { ok: false, error: result.error });
+});
+
 app.get('/api/chat/:channel', (req, res) => {
   const channelName = req.params.channel;
   if (!ChatStore.validChannel(channelName)) {
@@ -137,7 +150,13 @@ app.get('/api/chat/:channel', (req, res) => {
   const username = String(req.query.name || '').slice(0, 16);
   const online = chat.touch(channelName, uid, username);
   res.set('Cache-Control', 'no-store');
-  res.json({ ok: true, epoch: chat.epoch, messages: chat.messages(channelName, since), online });
+  res.json({
+    ok: true,
+    epoch: chat.epoch,
+    messages: chat.messages(channelName, since),
+    online,
+    isHost: chat.isHost(uid),
+  });
 });
 
 app.post('/api/chat/:channel', (req, res) => {
@@ -181,6 +200,7 @@ const server = app.listen(config.httpPort, '0.0.0.0', () => {
   log(`  省流模式: ${config.uplinkMbps <= 10 ? '已启用（轮询间隔拉长，页面显示码率超限提示）' : '关闭'}`);
   log(`  HLS 目录: ${config.hlsDir}`);
   log(`  评论区: ${path.join(config.dataDir, 'chat')}（按频道隔离，重启清空）`);
+  log(`  主播标识: ${config.hostToken ? '已启用（口令来自 HOST_TOKEN / STREAM_TOKEN）' : '未启用'}`);
   if (config.streamToken) log('  注意: 日志包含密钥，请限制终端 / journald 的访问权限');
   else log('  提示: 公网部署请设置 STREAM_TOKEN，并只向推流端开放 1935 端口');
 });

@@ -5,6 +5,7 @@
 const $ = (selector) => document.querySelector(selector);
 const USER_KEY = 'obs-live-chat-user';
 const UID_KEY = 'obs-live-chat-uid';
+const HOST_TOKEN_KEY = 'obs-live-chat-host-token';
 const VALID_CHANNEL = /^[A-Za-z0-9_-]{1,48}$/;
 
 function storageGet(key) {
@@ -86,6 +87,13 @@ function appendMessage(message) {
   const text = document.createElement('span');
   text.className = 'chat-text';
   text.textContent = message.text;
+  // 主播由服务端根据凭据标记，客户端传来的 user 文本不能伪装
+  if (message.role === 'host') {
+    const badge = document.createElement('span');
+    badge.className = 'chat-badge-host';
+    badge.textContent = '主播';
+    row.appendChild(badge);
+  }
   row.append(time, user, text);
   messagesEl.appendChild(row);
 
@@ -214,6 +222,15 @@ window.addEventListener('pagehide', leaveCurrent);
 
 if (username) setJoined(true);
 else showJoin();
+// 主播在 /chat 验证过的话，观看页也沿用同一浏览器身份
+const savedHostToken = storageGet(HOST_TOKEN_KEY);
+if (savedHostToken) {
+  fetch('/api/chat/host/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uid, token: savedHostToken }),
+  }).then((response) => response.json()).catch(() => {});
+}
 poll();
 setInterval(poll, 3000);
 })();

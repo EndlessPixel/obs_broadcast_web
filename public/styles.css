@@ -243,6 +243,27 @@ h1 { margin: 0; font-size: clamp(24px, 3vw, 34px); font-weight: 700; letter-spac
 .chat-message { font-size: 12.5px; line-height: 1.6; word-break: break-word; }
 .chat-time { color: #5f6a85; margin-right: 6px; font-variant-numeric: tabular-nums; }
 .chat-user { color: var(--accent-2); font-weight: 600; margin-right: 6px; }
+.chat-badge-host {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+.host-state {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+.host-state[hidden] { display: none; }
+.join-box .btn + .btn { margin-top: 8px; }
 .chat-text { color: #dfe5f5; }
 .chat-input { display: flex; gap: 8px; margin-top: 12px; }
 .chat-input input {
