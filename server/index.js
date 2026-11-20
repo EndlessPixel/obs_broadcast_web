@@ -133,7 +133,8 @@ app.post('/api/chat/host/verify', (req, res) => {
   const result = chat.verifyHost(
     String(req.body?.uid || '').slice(0, 64),
     String(req.body?.token || '').slice(0, 128),
-    config.hostToken
+    config.hostToken,
+    String(req.body?.name || '').slice(0, 16)
   );
   res.status(result.status || 200).json(result.ok
     ? { ok: true }
@@ -148,7 +149,8 @@ app.get('/api/chat/:channel', (req, res) => {
   const since = Number.parseInt(String(req.query.since || '0'), 10) || 0;
   const uid = String(req.query.uid || '').slice(0, 64);
   const username = String(req.query.name || '').slice(0, 16);
-  const online = chat.touch(channelName, uid, username);
+  const nameStatus = chat.nameStatus(username, uid);
+  const online = chat.touch(channelName, uid, nameStatus.displayName);
   res.set('Cache-Control', 'no-store');
   res.json({
     ok: true,
@@ -156,6 +158,7 @@ app.get('/api/chat/:channel', (req, res) => {
     messages: chat.messages(channelName, since),
     online,
     isHost: chat.isHost(uid),
+    nameReserved: nameStatus.reserved,
   });
 });
 

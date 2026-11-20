@@ -27,6 +27,7 @@ class ChatStore {
     this.channels = new Map();
     this.lastSent = new Map();
     this.hosts = new Map();
+    this.reservedNames = new Map();
     this.verifyAttempts = new Map();
     this.reset();
   }
@@ -38,6 +39,7 @@ class ChatStore {
     this.channels.clear();
     this.lastSent.clear();
     this.hosts.clear();
+    this.reservedNames.clear();
     this.verifyAttempts.clear();
     this.epoch = String(Date.now());
     this.log('评论区已清空（历史消息不跨重启保留）');
@@ -74,13 +76,16 @@ class ChatStore {
     for (const [uid, expiry] of this.hosts) {
       if (expiry <= now) this.hosts.delete(uid);
     }
+    for (const [name, entry] of this.reservedNames) {
+      if (entry.expiry <= now) this.reservedNames.delete(name);
+    }
     for (const [uid, entry] of this.verifyAttempts) {
       if (now - entry.at > VERIFY_WINDOW) this.verifyAttempts.delete(uid);
     }
   }
 
   // 主播凭据只由服务端校验，客户端无法自行声明身份
-  verifyHost(uid, token, expected) {
+  verifyHost(uid, token, expected, username = '') {
     if (!expected) {
       return { ok: false, status: 400, error: '服务器未启用主播身份验证' };
     }
@@ -102,8 +107,31 @@ class ChatStore {
       return { ok: false, status: 401, error: '主播口令不正确' };
     }
     this.verifyAttempts.delete(uid);
-    this.hosts.set(uid, now + HOST_TTL);
+    const expiry = now + HOST_TTL;
+    this.hosts.set(uid, expiry);
+
+    // 主播当前用户名登记为保留名：同名只能由该 uid 使用
+    const hostName = clean(username, MAX_NAME);
+    for (const [name, entry] of this.reservedNames) {
+      if (entry.uid === uid && name !== hostName.toLowerCase()) {
+        this.reservedNames.delete(name);
+      }
+    }
+    if (hostName) {
+      this.reservedNames.set(hostName.toLowerCase(), { uid, expiry });
+    }
     return { ok: true };
+  }
+
+  nameStatus(username, uid) {
+    const name = clean(username, MAX_NAME);
+    const key = name.toLowerCase();
+    const entry = key ? this.reservedNames.get(key) : null;
+    const reserved = Boolean(entry && entry.uid !== uid && entry.expiry > Date.now());
+    return {
+      reserved,
+      displayName: reserved ? `游客${String(uid || '').slice(-4)}` : name,
+    };
   }
 
   isHost(uid, now = Date.now()) {
@@ -157,6 +185,9 @@ class ChatStore {
     const text = clean(payload?.text, MAX_TEXT);
     if (!uid || !username || !text) {
       return { ok: false, status: 400, error: '需要用户名和消息内容' };
+    }
+    if (this.nameStatus(username, uid).reserved) {
+      return { ok: false, status: 403, error: '该用户名已被主播占用，请换一个名字' };
     }
 
     const now = Date.now();

@@ -31,6 +31,8 @@ if (!VALID_CHANNEL.test(channel)) channel = 'studio';
 let lastId = 0;
 let epoch = '';
 let polling = false;
+let isHost = false;
+let nameConflictWarned = false;
 const seen = new Set();
 
 const messagesEl = $('#chat-messages');
@@ -64,7 +66,8 @@ function setJoined(joined) {
   joinOverlay.hidden = joined;
 }
 
-function setHostState(isHost) {
+function setHostState(host) {
+  isHost = Boolean(host);
   hostState.hidden = !isHost;
   hostBtn.textContent = isHost ? '已验证' : '主播验证';
 }
@@ -87,7 +90,7 @@ async function verifyHost(token) {
     const response = await fetch('/api/chat/host/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid, token: secret }),
+      body: JSON.stringify({ uid, token: secret, name: username }),
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
@@ -174,6 +177,10 @@ async function poll() {
     }
     setOnline(Number(data.online) || 0);
     setHostState(Boolean(data.isHost));
+    if (data.nameReserved && !nameConflictWarned) {
+      nameConflictWarned = true;
+      showJoin('该用户名已被主播占用，请换一个名字');
+    }
     setStatus(username ? '已连接' : '只读，输入用户名后可发言');
     serverStatus(true);
   } catch (_err) {
@@ -252,8 +259,11 @@ function submitJoin() {
   }
   username = name;
   storageSet(USER_KEY, name);
+  nameConflictWarned = false;
   setJoined(true);
   setStatus('已加入，正在同步…');
+  const savedToken = storageGet(HOST_TOKEN_KEY);
+  if (savedToken && isHost) verifyHost(savedToken);
   poll();
 }
 
@@ -274,6 +284,7 @@ formEl.addEventListener('submit', async (event) => {
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
+      if (response.status === 403) showJoin(data.error);
       setStatus(data.error || '发送失败');
       return;
     }
